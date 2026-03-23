@@ -4,6 +4,8 @@ const LEGACY_SINGLE_SAVE_V2 = "slotBuilderSave_v2";
 const LEGACY_SINGLE_SAVE_V1 = "slotBuilderSave_v1";
 const QUEST_REROLL_COST = { wood: 0, stone: 0, metal: 20, energy: 20 };
 const RUN_SCHEMA_VERSION = 2;
+const VICTORY_STRUCTURE_TARGET_EACH = 20;
+const VICTORY_RESOURCE_TARGET = 25000;
 
 const defaultState = {
   schemaVersion: RUN_SCHEMA_VERSION,
@@ -369,9 +371,14 @@ function getCurrentPassiveTotal(s) {
 }
 
 function getVictoryProgressPercent() {
-  const structureGoal = Math.min(1, getTotalStructures(state) / 20);
-  const resourceGoal = Math.min(1, getTotalResources(state) / 1000);
+  const structureTargetTotal = Object.keys(state.structures).length * VICTORY_STRUCTURE_TARGET_EACH;
+  const structureGoal = Math.min(1, getTotalStructures(state) / structureTargetTotal);
+  const resourceGoal = Math.min(1, getTotalResources(state) / VICTORY_RESOURCE_TARGET);
   return Math.round(((structureGoal + resourceGoal) / 2) * 100);
+}
+
+function getVictoryTargetText() {
+  return `Victory target: ${VICTORY_STRUCTURE_TARGET_EACH} of each structure and ${VICTORY_RESOURCE_TARGET} total resources.`;
 }
 
 function pushPassivePoint(value) {
@@ -620,13 +627,11 @@ function checkMilestones() {
 }
 
 function checkWinCondition() {
-  const hasFiveEach =
-    state.structures.sawmill >= 5 &&
-    state.structures.quarry >= 5 &&
-    state.structures.forge >= 5 &&
-    state.structures.reactor >= 5;
-  const hasResourceGoal = getTotalResources(state) >= 1000;
-  if (!state.hasWon && hasFiveEach && hasResourceGoal) {
+  const hasStructureGoal = Object.values(state.structures).every(
+    (count) => count >= VICTORY_STRUCTURE_TARGET_EACH,
+  );
+  const hasResourceGoal = getTotalResources(state) >= VICTORY_RESOURCE_TARGET;
+  if (!state.hasWon && hasStructureGoal && hasResourceGoal) {
     state.hasWon = true;
     const message = "Victory achieved! You built a thriving resource engine.";
     ids.result.textContent = message;
@@ -1532,7 +1537,7 @@ function updateUi() {
 
   ids.winStatus.textContent = state.hasWon
     ? "Victory reached! Your camp is fully developed. Keep playing to optimize."
-    : "Victory target: 5 of each structure and 1000 total resources.";
+    : getVictoryTargetText();
 
   setRunStatus(state.runName ? `Active run: ${state.runName}` : "No run loaded.");
 
