@@ -4,8 +4,10 @@ const LEGACY_SINGLE_SAVE_V2 = "slotBuilderSave_v2";
 const LEGACY_SINGLE_SAVE_V1 = "slotBuilderSave_v1";
 const QUEST_REROLL_COST = { wood: 0, stone: 0, metal: 20, energy: 20 };
 const RUN_SCHEMA_VERSION = 2;
-const VICTORY_STRUCTURE_TARGET_EACH = 20;
-const VICTORY_RESOURCE_TARGET = 25000;
+const VICTORY_STRUCTURE_TARGET_EACH = 60;
+const VICTORY_RESOURCE_TARGET = 500000;
+const RUN_TIME_LIMIT_SECONDS = 3 * 60 * 60;
+const STALL_FAIL_SECONDS = 150;
 
 const defaultState = {
   schemaVersion: RUN_SCHEMA_VERSION,
@@ -22,6 +24,10 @@ const defaultState = {
   totalResourceHistory: [],
   unlockedMilestones: [],
   hasWon: false,
+  hasLost: false,
+  lossReason: "",
+  lossAt: 0,
+  stallSeconds: 0,
   trendSharedScale: false,
   eventCount: 0,
   offlineGainTotal: 0,
@@ -378,7 +384,7 @@ function getVictoryProgressPercent() {
 }
 
 function getVictoryTargetText() {
-  return `Victory target: ${VICTORY_STRUCTURE_TARGET_EACH} of each structure and ${VICTORY_RESOURCE_TARGET} total resources.`;
+  return `Victory target: ${VICTORY_STRUCTURE_TARGET_EACH} of each structure and ${VICTORY_RESOURCE_TARGET} total resources within ${formatClock(RUN_TIME_LIMIT_SECONDS)}.`;
 }
 
 function pushPassivePoint(value) {
@@ -627,6 +633,8 @@ function checkMilestones() {
 }
 
 function checkWinCondition() {
+  if (state.hasLost) return;
+
   const hasStructureGoal = Object.values(state.structures).every(
     (count) => count >= VICTORY_STRUCTURE_TARGET_EACH,
   );
@@ -637,6 +645,34 @@ function checkWinCondition() {
     ids.result.textContent = message;
     addActivity(message);
     playBeep(1200, 0.15, 0.07, "sawtooth");
+  }
+}
+
+function triggerLoss(reason) {
+  if (state.hasWon || state.hasLost) return;
+
+  state.hasLost = true;
+  state.lossReason = reason;
+  state.lossAt = state.playSeconds;
+  const message = `Run failed: ${reason}`;
+  ids.result.textContent = message;
+  addActivity(message);
+  playBeep(140, 0.11, 0.055, "square");
+  saveCurrentRun(false);
+}
+
+function evaluateLossConditions() {
+  if (state.hasWon || state.hasLost) return;
+
+  if (state.playSeconds >= RUN_TIME_LIMIT_SECONDS) {
+    triggerLoss(`time limit reached (${formatClock(RUN_TIME_LIMIT_SECONDS)})`);
+    return;
+  }
+
+  const stalled = state.energy < getSpinCost() && getCurrentPassiveTotal(state) === 0;
+  state.stallSeconds = stalled ? state.stallSeconds + 1 : 0;
+  if (state.stallSeconds >= STALL_FAIL_SECONDS) {
+    triggerLoss(`camp stalled for ${formatClock(STALL_FAIL_SECONDS)} with no energy or passive income`);
   }
 }
 
@@ -725,6 +761,11 @@ function maybeTriggerWorldEvent() {
 }
 
 function spin() {
+  if (state.hasLost) {
+    ids.result.textContent = "Run failed. Create a new run to try again.";
+    return;
+  }
+
   const spinCost = getSpinCost();
   if (state.energy < spinCost) {
     ids.result.textContent = "Not enough Energy to spin.";
@@ -794,6 +835,11 @@ function spin() {
 }
 
 function buildStructure(structure) {
+  if (state.hasLost) {
+    ids.result.textContent = "Run failed. Create a new run to try again.";
+    return;
+  }
+
   const cost = getScaledStructureCost(structure);
   if (!canAfford(cost)) {
     ids.result.textContent = "Not enough resources to build that structure.";
@@ -816,6 +862,11 @@ function buildStructure(structure) {
 }
 
 function buyUpgrade(name) {
+  if (state.hasLost) {
+    ids.result.textContent = "Run failed. Create a new run to try again.";
+    return;
+  }
+
   const cost = getScaledUpgradeCost(name);
   if (!canAfford(cost)) {
     ids.result.textContent = `Not enough resources for ${upgradeNames[name]}.`;
@@ -838,6 +889,11 @@ function buyUpgrade(name) {
 }
 
 function tickPassiveIncome() {
+  if (state.hasLost) {
+    updateUi();
+    return;
+  }
+
   state.playSeconds += 1;
 
   refreshQuests(false);
@@ -856,6 +912,7 @@ function tickPassiveIncome() {
   updateQuestProgressAndRewards();
   checkMilestones();
   checkWinCondition();
+  evaluateLossConditions();
   updateUi();
 }
 
@@ -901,6 +958,10 @@ function copyStateFrom(source) {
   state.totalResourceHistory = Array.isArray(merged.totalResourceHistory) ? [...merged.totalResourceHistory] : [];
   state.unlockedMilestones = Array.isArray(merged.unlockedMilestones) ? [...merged.unlockedMilestones] : [];
   state.hasWon = Boolean(merged.hasWon);
+  state.hasLost = !state.hasWon && Boolean(merged.hasLost);
+  state.lossReason = state.hasLost ? String(merged.lossReason || "") : "";
+  state.lossAt = state.hasLost ? Number(merged.lossAt) || 0 : 0;
+  state.stallSeconds = Math.max(0, Number(merged.stallSeconds) || 0);
   state.trendSharedScale = Boolean(merged.trendSharedScale);
   state.eventCount = Number(merged.eventCount) || 0;
   state.offlineGainTotal = Number(merged.offlineGainTotal) || 0;
@@ -949,6 +1010,10 @@ function sanitizeRunSaveData(raw) {
       ? raw.unlockedMilestones.filter((id) => milestones.some((m) => m.id === id))
       : [],
     hasWon: Boolean(raw.hasWon),
+    hasLost: Boolean(raw.hasLost),
+    lossReason: String(raw.lossReason || ""),
+    lossAt: Math.max(0, Number(raw.lossAt) || 0),
+    stallSeconds: Math.max(0, Number(raw.stallSeconds) || 0),
     trendSharedScale: Boolean(raw.trendSharedScale),
     eventCount: Number(raw.eventCount) || 0,
     offlineGainTotal: Number(raw.offlineGainTotal) || 0,
@@ -990,6 +1055,10 @@ function createSnapshot() {
     totalResourceHistory: state.totalResourceHistory,
     unlockedMilestones: state.unlockedMilestones,
     hasWon: state.hasWon,
+    hasLost: state.hasLost,
+    lossReason: state.lossReason,
+    lossAt: state.lossAt,
+    stallSeconds: state.stallSeconds,
     trendSharedScale: state.trendSharedScale,
     eventCount: state.eventCount,
     offlineGainTotal: state.offlineGainTotal,
@@ -1227,6 +1296,11 @@ function deleteSelectedRun() {
 }
 
 function rerollQuests() {
+  if (state.hasLost) {
+    ids.result.textContent = "Run failed. Create a new run to try again.";
+    return;
+  }
+
   if (!canAfford(QUEST_REROLL_COST)) {
     ids.result.textContent = "Need 20 Energy and 20 Metal to reroll quests.";
     playBeep(170, 0.05, 0.03, "square");
@@ -1354,6 +1428,11 @@ function toggleTrendScale() {
 }
 
 function cycleBiome() {
+  if (state.hasLost) {
+    ids.result.textContent = "Run failed. Create a new run to try again.";
+    return;
+  }
+
   const keys = Object.keys(biomes);
   const unlocks = getBiomeUnlocks();
   let index = keys.indexOf(state.biome);
@@ -1422,9 +1501,10 @@ function updateUi() {
   ids.energy.textContent = Math.floor(state.energy);
 
   const spinCost = getSpinCost();
+  const gameplayLocked = state.hasLost;
   ids.spinBtn.textContent = `Spin (${spinCost} Energy)`;
-  ids.spinBtn.disabled = state.energy < spinCost;
-  ids.questRerollBtn.disabled = !canAfford(QUEST_REROLL_COST);
+  ids.spinBtn.disabled = gameplayLocked || state.energy < spinCost;
+  ids.questRerollBtn.disabled = gameplayLocked || !canAfford(QUEST_REROLL_COST);
 
   const minutesPlayed = Math.max(state.playSeconds / 60, 1 / 60);
   const spinsPerMinute = state.spins / minutesPlayed;
@@ -1442,7 +1522,11 @@ function updateUi() {
   const unlocks = getBiomeUnlocks();
   const biomeLabel = biomes[state.biome]?.label || "Meadow";
   ids.biomeCycleBtn.textContent = `Biome: ${biomeLabel}`;
-  ids.biomeCycleBtn.disabled = Object.values(unlocks).filter(Boolean).length <= 1;
+  ids.biomeCycleBtn.disabled = gameplayLocked || Object.values(unlocks).filter(Boolean).length <= 1;
+
+  document.querySelectorAll(".build-btn, .upgrade-btn").forEach((btn) => {
+    btn.disabled = gameplayLocked;
+  });
 
   renderTrendSparkline();
 
@@ -1462,6 +1546,8 @@ function updateUi() {
     <span>Reactor: ${state.structures.reactor}</span>
     <span>Total Structures: ${getTotalStructures(state)}</span>
     <span>Total Resources: ${Math.floor(getTotalResources(state))}</span>
+    <span>Time Remaining: ${formatClock(Math.max(0, RUN_TIME_LIMIT_SECONDS - state.playSeconds))}</span>
+    <span>Stall Risk: ${state.stallSeconds}/${STALL_FAIL_SECONDS}</span>
     <span>Biome: ${biomeLabel}</span>
   `;
 
@@ -1535,9 +1621,11 @@ function updateUi() {
   ids.eventCount.textContent = `Events ${state.eventCount}`;
   ids.offlineGain.textContent = `Offline Gain ${Math.floor(state.offlineGainTotal)}`;
 
-  ids.winStatus.textContent = state.hasWon
-    ? "Victory reached! Your camp is fully developed. Keep playing to optimize."
-    : getVictoryTargetText();
+  ids.winStatus.textContent = state.hasLost
+    ? `Run failed: ${state.lossReason}. Start a new run.`
+    : state.hasWon
+      ? "Victory reached! Your camp is fully developed. Keep playing to optimize."
+      : getVictoryTargetText();
 
   setRunStatus(state.runName ? `Active run: ${state.runName}` : "No run loaded.");
 
