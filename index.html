@@ -28,7 +28,7 @@
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel run-panel">
       <h2>Run Manager</h2>
       <div class="run-controls">
         <input id="run-name-input" type="text" maxlength="24" placeholder="New run name" aria-label="New run name" />
@@ -48,7 +48,7 @@
       <div class="owned" id="run-summary"></div>
     </section>
 
-    <section class="panel stats">
+    <section class="panel stats resources-panel">
       <h2>Resources</h2>
       <div class="stat-grid">
         <div><span class="label">Wood</span><span id="wood">0</span></div>
@@ -58,7 +58,7 @@
       </div>
     </section>
 
-    <section class="panel stats">
+    <section class="panel stats session-panel">
       <h2>Session Stats</h2>
       <div class="stat-grid compact">
         <div><span class="label">Play Time</span><span id="play-time">00:00</span></div>
@@ -88,7 +88,7 @@
       </div>
     </section>
 
-    <section class="panel reels">
+    <section class="panel reels reels-panel">
       <h2>Generator Reels</h2>
       <div class="reel-row">
         <div class="reel" id="reel-1">?</div>
@@ -102,7 +102,7 @@
       <p id="spin-result" class="result">Press Spin to gather resources.</p>
     </section>
 
-    <section class="panel">
+    <section class="panel quest-panel">
       <h2>Quest Board</h2>
       <div class="controls">
         <button id="quest-reroll-btn" class="secondary-btn">Reroll Quests (20 Energy + 20 Metal)</button>
@@ -111,7 +111,7 @@
       <div class="owned" id="quest-list"></div>
     </section>
 
-    <section class="panel build">
+    <section class="panel build structures-panel">
       <h2>Structures</h2>
       <div class="build-list">
         <button class="build-btn" data-structure="sawmill">Build Sawmill<br><small id="cost-sawmill">Cost: 40 Wood, 10 Stone</small></button>
@@ -122,13 +122,13 @@
       <div class="owned" id="owned-list"></div>
     </section>
 
-    <section class="panel progression">
+    <section class="panel progression progression-panel">
       <h2>Progression</h2>
       <p id="win-status" class="result">Victory target: 60 of each structure and 500000 total resources within 180:00.</p>
       <div class="owned" id="milestones-list"></div>
     </section>
 
-    <section class="panel" id="certificate-panel" hidden>
+    <section class="panel certificate-panel" id="certificate-panel" hidden>
       <h2>Victory Certificate</h2>
       <p class="result">Run complete. Here is your completion certificate.</p>
       <div class="controls">
@@ -137,7 +137,7 @@
       <pre id="certificate-text" class="certificate-text"></pre>
     </section>
 
-    <section class="panel">
+    <section class="panel upgrades-panel">
       <h2>Upgrade Lab</h2>
       <div class="build-list">
         <button class="upgrade-btn" data-upgrade="reelEfficiency">Efficient Reels<br><small id="cost-reelEfficiency">Cost: 80 Metal, 80 Energy</small></button>
@@ -148,7 +148,7 @@
       <div class="owned" id="upgrades-list"></div>
     </section>
 
-    <section class="panel">
+    <section class="panel events-panel">
       <h2>World Events</h2>
       <div class="controls">
         <button id="biome-cycle-btn" class="secondary-btn">Biome: Meadow</button>
@@ -157,12 +157,12 @@
       <div class="owned" id="event-log"></div>
     </section>
 
-    <section class="panel">
+    <section class="panel activity-panel">
       <h2>Activity Feed</h2>
       <div class="owned" id="activity-log"></div>
     </section>
 
-    <section class="panel tips">
+    <section class="panel tips tips-panel">
       <h2>How It Works</h2>
       <ul>
         <li>Spinning consumes Energy and yields random symbols that grant resources.</li>
