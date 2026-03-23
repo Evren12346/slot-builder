@@ -4,10 +4,23 @@ const LEGACY_SINGLE_SAVE_V2 = "slotBuilderSave_v2";
 const LEGACY_SINGLE_SAVE_V1 = "slotBuilderSave_v1";
 const QUEST_REROLL_COST = { wood: 0, stone: 0, metal: 20, energy: 20 };
 const RUN_SCHEMA_VERSION = 2;
-const VICTORY_STRUCTURE_TARGET_EACH = 60;
-const VICTORY_RESOURCE_TARGET = 500000;
-const RUN_TIME_LIMIT_SECONDS = 3 * 60 * 60;
-const STALL_FAIL_SECONDS = 150;
+const DIFFICULTY_PRESETS = {
+  normal: {
+    label: "Normal",
+    victoryStructureTargetEach: 20,
+    victoryResourceTarget: 25000,
+    runTimeLimitSeconds: 0,
+    stallFailSeconds: 0,
+  },
+  nightmare: {
+    label: "Nightmare",
+    victoryStructureTargetEach: 60,
+    victoryResourceTarget: 500000,
+    runTimeLimitSeconds: 3 * 60 * 60,
+    stallFailSeconds: 150,
+  },
+};
+const DEFAULT_DIFFICULTY = "nightmare";
 
 const defaultState = {
   schemaVersion: RUN_SCHEMA_VERSION,
@@ -23,7 +36,9 @@ const defaultState = {
   passiveHistory: [],
   totalResourceHistory: [],
   unlockedMilestones: [],
+  difficulty: DEFAULT_DIFFICULTY,
   hasWon: false,
+  wonAt: 0,
   hasLost: false,
   lossReason: "",
   lossAt: 0,
@@ -210,6 +225,9 @@ const ids = {
   importRunBtn: document.getElementById("import-run-btn"),
   importRunFile: document.getElementById("import-run-file"),
   questRerollBtn: document.getElementById("quest-reroll-btn"),
+  difficultyToggleBtn: document.getElementById("difficulty-toggle-btn"),
+  certificatePanel: document.getElementById("certificate-panel"),
+  certificateText: document.getElementById("certificate-text"),
   costTags: {
     sawmill: document.getElementById("cost-sawmill"),
     quarry: document.getElementById("cost-quarry"),
@@ -376,15 +394,56 @@ function getCurrentPassiveTotal(s) {
   return passive.wood + passive.stone + passive.metal + passive.energy;
 }
 
+function getDifficultyConfig() {
+  return DIFFICULTY_PRESETS[state.difficulty] || DIFFICULTY_PRESETS[DEFAULT_DIFFICULTY];
+}
+
 function getVictoryProgressPercent() {
-  const structureTargetTotal = Object.keys(state.structures).length * VICTORY_STRUCTURE_TARGET_EACH;
+  const config = getDifficultyConfig();
+  const structureTargetTotal = Object.keys(state.structures).length * config.victoryStructureTargetEach;
   const structureGoal = Math.min(1, getTotalStructures(state) / structureTargetTotal);
-  const resourceGoal = Math.min(1, getTotalResources(state) / VICTORY_RESOURCE_TARGET);
+  const resourceGoal = Math.min(1, getTotalResources(state) / config.victoryResourceTarget);
   return Math.round(((structureGoal + resourceGoal) / 2) * 100);
 }
 
 function getVictoryTargetText() {
-  return `Victory target: ${VICTORY_STRUCTURE_TARGET_EACH} of each structure and ${VICTORY_RESOURCE_TARGET} total resources within ${formatClock(RUN_TIME_LIMIT_SECONDS)}.`;
+  const config = getDifficultyConfig();
+  const deadlineText = config.runTimeLimitSeconds
+    ? ` within ${formatClock(config.runTimeLimitSeconds)}`
+    : "";
+  return `Victory target: ${config.victoryStructureTargetEach} of each structure and ${config.victoryResourceTarget} total resources${deadlineText}.`;
+}
+
+function canChangeDifficulty() {
+  return (
+    state.spins === 0 &&
+    state.playSeconds === 0 &&
+    getTotalStructures(state) === 0 &&
+    getTotalUpgrades(state) === 0
+  );
+}
+
+function getRunEndBlockMessage() {
+  if (state.hasWon) return "Run complete. Create a new run to play again.";
+  if (state.hasLost) return "Run failed. Create a new run to try again.";
+  return "";
+}
+
+function buildVictoryCertificate() {
+  if (!state.hasWon) return "";
+  const config = getDifficultyConfig();
+  const completedAt = new Date().toLocaleString();
+  return [
+    "=== SLOT-LIKE BUILDER VICTORY CERTIFICATE ===",
+    `Run Name: ${state.runName || "Untitled Run"}`,
+    `Difficulty: ${config.label}`,
+    `Completion Time: ${formatClock(state.wonAt || state.playSeconds)}`,
+    `Spins Used: ${state.spins}`,
+    `Final Resources: ${Math.floor(getTotalResources(state))}`,
+    `Final Structures: ${getTotalStructures(state)}`,
+    "Award: Camp Founder Certificate",
+    `Issued: ${completedAt}`,
+  ].join("\n");
 }
 
 function pushPassivePoint(value) {
@@ -635,16 +694,19 @@ function checkMilestones() {
 function checkWinCondition() {
   if (state.hasLost) return;
 
+  const config = getDifficultyConfig();
   const hasStructureGoal = Object.values(state.structures).every(
-    (count) => count >= VICTORY_STRUCTURE_TARGET_EACH,
+    (count) => count >= config.victoryStructureTargetEach,
   );
-  const hasResourceGoal = getTotalResources(state) >= VICTORY_RESOURCE_TARGET;
+  const hasResourceGoal = getTotalResources(state) >= config.victoryResourceTarget;
   if (!state.hasWon && hasStructureGoal && hasResourceGoal) {
     state.hasWon = true;
-    const message = "Victory achieved! You built a thriving resource engine.";
+    state.wonAt = state.playSeconds;
+    const message = "Victory achieved! You are now a Certified Camp Founder.";
     ids.result.textContent = message;
     addActivity(message);
     playBeep(1200, 0.15, 0.07, "sawtooth");
+    saveCurrentRun(false);
   }
 }
 
@@ -664,15 +726,20 @@ function triggerLoss(reason) {
 function evaluateLossConditions() {
   if (state.hasWon || state.hasLost) return;
 
-  if (state.playSeconds >= RUN_TIME_LIMIT_SECONDS) {
-    triggerLoss(`time limit reached (${formatClock(RUN_TIME_LIMIT_SECONDS)})`);
+  const config = getDifficultyConfig();
+
+  if (config.runTimeLimitSeconds && state.playSeconds >= config.runTimeLimitSeconds) {
+    triggerLoss(`time limit reached (${formatClock(config.runTimeLimitSeconds)})`);
     return;
   }
 
-  const stalled = state.energy < getSpinCost() && getCurrentPassiveTotal(state) === 0;
+  const stalled =
+    config.stallFailSeconds > 0 &&
+    state.energy < getSpinCost() &&
+    getCurrentPassiveTotal(state) === 0;
   state.stallSeconds = stalled ? state.stallSeconds + 1 : 0;
-  if (state.stallSeconds >= STALL_FAIL_SECONDS) {
-    triggerLoss(`camp stalled for ${formatClock(STALL_FAIL_SECONDS)} with no energy or passive income`);
+  if (config.stallFailSeconds > 0 && state.stallSeconds >= config.stallFailSeconds) {
+    triggerLoss(`camp stalled for ${formatClock(config.stallFailSeconds)} with no energy or passive income`);
   }
 }
 
@@ -761,8 +828,8 @@ function maybeTriggerWorldEvent() {
 }
 
 function spin() {
-  if (state.hasLost) {
-    ids.result.textContent = "Run failed. Create a new run to try again.";
+  if (state.hasWon || state.hasLost) {
+    ids.result.textContent = getRunEndBlockMessage();
     return;
   }
 
@@ -835,8 +902,8 @@ function spin() {
 }
 
 function buildStructure(structure) {
-  if (state.hasLost) {
-    ids.result.textContent = "Run failed. Create a new run to try again.";
+  if (state.hasWon || state.hasLost) {
+    ids.result.textContent = getRunEndBlockMessage();
     return;
   }
 
@@ -862,8 +929,8 @@ function buildStructure(structure) {
 }
 
 function buyUpgrade(name) {
-  if (state.hasLost) {
-    ids.result.textContent = "Run failed. Create a new run to try again.";
+  if (state.hasWon || state.hasLost) {
+    ids.result.textContent = getRunEndBlockMessage();
     return;
   }
 
@@ -889,7 +956,7 @@ function buyUpgrade(name) {
 }
 
 function tickPassiveIncome() {
-  if (state.hasLost) {
+  if (state.hasLost || state.hasWon) {
     updateUi();
     return;
   }
@@ -957,7 +1024,9 @@ function copyStateFrom(source) {
   state.passiveHistory = Array.isArray(merged.passiveHistory) ? [...merged.passiveHistory] : [];
   state.totalResourceHistory = Array.isArray(merged.totalResourceHistory) ? [...merged.totalResourceHistory] : [];
   state.unlockedMilestones = Array.isArray(merged.unlockedMilestones) ? [...merged.unlockedMilestones] : [];
+  state.difficulty = DIFFICULTY_PRESETS[merged.difficulty] ? merged.difficulty : DEFAULT_DIFFICULTY;
   state.hasWon = Boolean(merged.hasWon);
+  state.wonAt = state.hasWon ? Number(merged.wonAt) || state.playSeconds : 0;
   state.hasLost = !state.hasWon && Boolean(merged.hasLost);
   state.lossReason = state.hasLost ? String(merged.lossReason || "") : "";
   state.lossAt = state.hasLost ? Number(merged.lossAt) || 0 : 0;
@@ -1009,7 +1078,9 @@ function sanitizeRunSaveData(raw) {
     unlockedMilestones: Array.isArray(raw.unlockedMilestones)
       ? raw.unlockedMilestones.filter((id) => milestones.some((m) => m.id === id))
       : [],
+    difficulty: DIFFICULTY_PRESETS[raw.difficulty] ? raw.difficulty : DEFAULT_DIFFICULTY,
     hasWon: Boolean(raw.hasWon),
+    wonAt: Math.max(0, Number(raw.wonAt) || 0),
     hasLost: Boolean(raw.hasLost),
     lossReason: String(raw.lossReason || ""),
     lossAt: Math.max(0, Number(raw.lossAt) || 0),
@@ -1054,7 +1125,9 @@ function createSnapshot() {
     passiveHistory: state.passiveHistory,
     totalResourceHistory: state.totalResourceHistory,
     unlockedMilestones: state.unlockedMilestones,
+    difficulty: state.difficulty,
     hasWon: state.hasWon,
+    wonAt: state.wonAt,
     hasLost: state.hasLost,
     lossReason: state.lossReason,
     lossAt: state.lossAt,
@@ -1296,8 +1369,8 @@ function deleteSelectedRun() {
 }
 
 function rerollQuests() {
-  if (state.hasLost) {
-    ids.result.textContent = "Run failed. Create a new run to try again.";
+  if (state.hasWon || state.hasLost) {
+    ids.result.textContent = getRunEndBlockMessage();
     return;
   }
 
@@ -1428,8 +1501,8 @@ function toggleTrendScale() {
 }
 
 function cycleBiome() {
-  if (state.hasLost) {
-    ids.result.textContent = "Run failed. Create a new run to try again.";
+  if (state.hasWon || state.hasLost) {
+    ids.result.textContent = getRunEndBlockMessage();
     return;
   }
 
@@ -1457,6 +1530,21 @@ function toggleAudio() {
   if (state.soundEnabled) {
     playBeep(660, 0.06, 0.04, "triangle");
   }
+  saveCurrentRun(false);
+  updateUi();
+}
+
+function toggleDifficulty() {
+  if (!canChangeDifficulty()) {
+    ids.result.textContent = "Difficulty can only be changed at the very start of a fresh run.";
+    return;
+  }
+
+  state.difficulty = state.difficulty === "nightmare" ? "normal" : "nightmare";
+  state.stallSeconds = 0;
+  const label = getDifficultyConfig().label;
+  ids.result.textContent = `Difficulty set to ${label}.`;
+  addActivity(`Difficulty set to ${label}.`);
   saveCurrentRun(false);
   updateUi();
 }
@@ -1500,11 +1588,14 @@ function updateUi() {
   ids.metal.textContent = Math.floor(state.metal);
   ids.energy.textContent = Math.floor(state.energy);
 
+  const config = getDifficultyConfig();
   const spinCost = getSpinCost();
-  const gameplayLocked = state.hasLost;
+  const gameplayLocked = state.hasLost || state.hasWon;
   ids.spinBtn.textContent = `Spin (${spinCost} Energy)`;
   ids.spinBtn.disabled = gameplayLocked || state.energy < spinCost;
   ids.questRerollBtn.disabled = gameplayLocked || !canAfford(QUEST_REROLL_COST);
+  ids.difficultyToggleBtn.textContent = `Difficulty: ${config.label}`;
+  ids.difficultyToggleBtn.disabled = gameplayLocked || !canChangeDifficulty();
 
   const minutesPlayed = Math.max(state.playSeconds / 60, 1 / 60);
   const spinsPerMinute = state.spins / minutesPlayed;
@@ -1546,8 +1637,9 @@ function updateUi() {
     <span>Reactor: ${state.structures.reactor}</span>
     <span>Total Structures: ${getTotalStructures(state)}</span>
     <span>Total Resources: ${Math.floor(getTotalResources(state))}</span>
-    <span>Time Remaining: ${formatClock(Math.max(0, RUN_TIME_LIMIT_SECONDS - state.playSeconds))}</span>
-    <span>Stall Risk: ${state.stallSeconds}/${STALL_FAIL_SECONDS}</span>
+    <span>Difficulty: ${config.label}</span>
+    <span>Time Remaining: ${config.runTimeLimitSeconds ? formatClock(Math.max(0, config.runTimeLimitSeconds - state.playSeconds)) : "No limit"}</span>
+    <span>Stall Risk: ${config.stallFailSeconds ? `${state.stallSeconds}/${config.stallFailSeconds}` : "Disabled"}</span>
     <span>Biome: ${biomeLabel}</span>
   `;
 
@@ -1624,8 +1716,11 @@ function updateUi() {
   ids.winStatus.textContent = state.hasLost
     ? `Run failed: ${state.lossReason}. Start a new run.`
     : state.hasWon
-      ? "Victory reached! Your camp is fully developed. Keep playing to optimize."
+      ? `Victory reached in ${formatClock(state.wonAt || state.playSeconds)}. Reward: Camp Founder Certificate.`
       : getVictoryTargetText();
+
+  ids.certificatePanel.hidden = !state.hasWon;
+  ids.certificateText.textContent = state.hasWon ? buildVictoryCertificate() : "";
 
   setRunStatus(state.runName ? `Active run: ${state.runName}` : "No run loaded.");
 
@@ -1681,6 +1776,7 @@ ids.importRunFile.addEventListener("change", () => {
   ids.importRunFile.value = "";
 });
 ids.questRerollBtn.addEventListener("click", rerollQuests);
+ids.difficultyToggleBtn.addEventListener("click", toggleDifficulty);
 
 document.querySelectorAll(".build-btn").forEach((btn) => {
   btn.addEventListener("click", () => buildStructure(btn.dataset.structure));

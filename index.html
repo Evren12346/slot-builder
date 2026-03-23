@@ -41,6 +41,7 @@
       <div class="controls">
         <button id="export-run-btn" class="secondary-btn">Export Run JSON</button>
         <button id="import-run-btn" class="secondary-btn">Import Run JSON</button>
+        <button id="difficulty-toggle-btn" class="secondary-btn">Difficulty: Nightmare</button>
         <input id="import-run-file" type="file" accept="application/json" hidden />
       </div>
       <p id="run-status" class="result">No run loaded yet.</p>
@@ -125,6 +126,12 @@
       <h2>Progression</h2>
       <p id="win-status" class="result">Victory target: 60 of each structure and 500000 total resources within 180:00.</p>
       <div class="owned" id="milestones-list"></div>
+    </section>
+
+    <section class="panel" id="certificate-panel" hidden>
+      <h2>Victory Certificate</h2>
+      <p class="result">Run complete. Here is your completion certificate.</p>
+      <pre id="certificate-text" class="certificate-text"></pre>
     </section>
 
     <section class="panel">
