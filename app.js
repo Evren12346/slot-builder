@@ -228,6 +228,7 @@ const ids = {
   difficultyToggleBtn: document.getElementById("difficulty-toggle-btn"),
   certificatePanel: document.getElementById("certificate-panel"),
   certificateText: document.getElementById("certificate-text"),
+  certificateDownloadBtn: document.getElementById("certificate-download-btn"),
   costTags: {
     sawmill: document.getElementById("cost-sawmill"),
     quarry: document.getElementById("cost-quarry"),
@@ -1549,6 +1550,27 @@ function toggleDifficulty() {
   updateUi();
 }
 
+function downloadCertificate() {
+  if (!state.hasWon) {
+    ids.result.textContent = "No victory certificate available yet.";
+    return;
+  }
+
+  const payload = `${buildVictoryCertificate()}\n`;
+  const blob = new Blob([payload], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const safeName = (state.runName || "run").replace(/[^a-z0-9_-]+/gi, "_");
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${safeName || "run"}_certificate.txt`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+
+  ids.result.textContent = "Victory certificate downloaded.";
+}
+
 function bindKeyboardShortcuts() {
   document.addEventListener("keydown", (event) => {
     const tag = (event.target && event.target.tagName) || "";
@@ -1721,6 +1743,7 @@ function updateUi() {
 
   ids.certificatePanel.hidden = !state.hasWon;
   ids.certificateText.textContent = state.hasWon ? buildVictoryCertificate() : "";
+  ids.certificateDownloadBtn.disabled = !state.hasWon;
 
   setRunStatus(state.runName ? `Active run: ${state.runName}` : "No run loaded.");
 
@@ -1777,6 +1800,7 @@ ids.importRunFile.addEventListener("change", () => {
 });
 ids.questRerollBtn.addEventListener("click", rerollQuests);
 ids.difficultyToggleBtn.addEventListener("click", toggleDifficulty);
+ids.certificateDownloadBtn.addEventListener("click", downloadCertificate);
 
 document.querySelectorAll(".build-btn").forEach((btn) => {
   btn.addEventListener("click", () => buildStructure(btn.dataset.structure));
