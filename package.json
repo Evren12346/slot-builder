@@ -1,0 +1,11 @@
+{
+  "name": "slot-builder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Casino-free slot-like builder with multi-run saves and migration harness",
+  "scripts": {
+    "test:migration": "node tools/migration_harness.js",
+    "check:syntax": "node --check app.js && node --check tools/migration_harness.js",
+    "verify": "npm run check:syntax && npm run test:migration"
+  }
+}

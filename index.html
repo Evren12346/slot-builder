@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Slot-Like Builder</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="game-wrap">
+    <h1>Slot-Like Builder</h1>
+    <p class="subtitle">Generate resources, expand your camp, and chase efficiency.</p>
+
+    <section class="panel hero-panel">
+      <h2>Camp Overview</h2>
+      <div class="hero-grid">
+        <div>
+          <span class="label">Victory Progress</span>
+          <div class="progress-track" aria-label="Victory progress">
+            <div id="victory-progress" class="progress-fill" style="width: 0%"></div>
+          </div>
+        </div>
+        <div class="hero-badges">
+          <span class="badge" id="milestone-count">Milestones 0/0</span>
+          <span class="badge" id="event-count">Events 0</span>
+          <span class="badge" id="offline-gain">Offline Gain 0</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Run Manager</h2>
+      <div class="run-controls">
+        <input id="run-name-input" type="text" maxlength="24" placeholder="New run name" aria-label="New run name" />
+        <button id="new-run-btn">Create Run</button>
+        <select id="run-select" aria-label="Saved runs"></select>
+        <button id="load-run-btn" class="secondary-btn">Load Run</button>
+        <button id="save-run-btn" class="secondary-btn">Save Run</button>
+        <button id="delete-run-btn" class="danger-btn">Delete Run</button>
+      </div>
+      <div class="controls">
+        <button id="export-run-btn" class="secondary-btn">Export Run JSON</button>
+        <button id="import-run-btn" class="secondary-btn">Import Run JSON</button>
+        <input id="import-run-file" type="file" accept="application/json" hidden />
+      </div>
+      <p id="run-status" class="result">No run loaded yet.</p>
+      <div class="owned" id="run-summary"></div>
+    </section>
+
+    <section class="panel stats">
+      <h2>Resources</h2>
+      <div class="stat-grid">
+        <div><span class="label">Wood</span><span id="wood">0</span></div>
+        <div><span class="label">Stone</span><span id="stone">0</span></div>
+        <div><span class="label">Metal</span><span id="metal">0</span></div>
+        <div><span class="label">Energy</span><span id="energy">0</span></div>
+      </div>
+    </section>
+
+    <section class="panel stats">
+      <h2>Session Stats</h2>
+      <div class="stat-grid compact">
+        <div><span class="label">Play Time</span><span id="play-time">00:00</span></div>
+        <div><span class="label">Spins / Min</span><span id="spins-per-min">0.00</span></div>
+        <div><span class="label">Passive / Sec</span><span id="passive-per-sec">0</span></div>
+        <div><span class="label">Passive Mix</span><span id="passive-mix">W0 S0 M0 E0</span></div>
+      </div>
+      <div class="sparkline-wrap">
+        <div class="sparkline-head">
+          <span class="label">Trends (Last 60s)</span>
+          <span id="trend-range">
+            Passive Min <span id="trend-min">0</span> | Passive Max <span id="trend-max">0</span><br>
+            Total Min <span id="total-trend-min">0</span> | Total Max <span id="total-trend-max">0</span>
+          </span>
+        </div>
+        <div class="controls">
+          <button id="trend-scale-toggle" class="secondary-btn">Scale: Independent</button>
+        </div>
+        <svg class="sparkline" viewBox="0 0 240 56" preserveAspectRatio="none" aria-label="Passive and total resource trend sparkline">
+          <polyline id="total-trend-line" points="0,54 240,54"></polyline>
+          <polyline id="passive-trend-line" points="0,54 240,54"></polyline>
+        </svg>
+        <div class="trend-legend">
+          <span class="legend-passive">Passive trend</span>
+          <span class="legend-total">Total resources trend</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel reels">
+      <h2>Generator Reels</h2>
+      <div class="reel-row">
+        <div class="reel" id="reel-1">?</div>
+        <div class="reel" id="reel-2">?</div>
+        <div class="reel" id="reel-3">?</div>
+      </div>
+      <div class="controls">
+        <button id="spin-btn">Spin (10 Energy)</button>
+        <button id="audio-toggle-btn" class="secondary-btn">Audio: On</button>
+      </div>
+      <p id="spin-result" class="result">Press Spin to gather resources.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Quest Board</h2>
+      <div class="controls">
+        <button id="quest-reroll-btn" class="secondary-btn">Reroll Quests (20 Energy + 20 Metal)</button>
+      </div>
+      <p id="quest-refresh" class="result">Refreshing quests...</p>
+      <div class="owned" id="quest-list"></div>
+    </section>
+
+    <section class="panel build">
+      <h2>Structures</h2>
+      <div class="build-list">
+        <button class="build-btn" data-structure="sawmill">Build Sawmill<br><small id="cost-sawmill">Cost: 40 Wood, 10 Stone</small></button>
+        <button class="build-btn" data-structure="quarry">Build Quarry<br><small id="cost-quarry">Cost: 25 Wood, 30 Stone</small></button>
+        <button class="build-btn" data-structure="forge">Build Forge<br><small id="cost-forge">Cost: 30 Stone, 30 Metal</small></button>
+        <button class="build-btn" data-structure="reactor">Build Reactor<br><small id="cost-reactor">Cost: 25 Metal, 50 Stone</small></button>
+      </div>
+      <div class="owned" id="owned-list"></div>
+    </section>
+
+    <section class="panel progression">
+      <h2>Progression</h2>
+      <p id="win-status" class="result">Victory target: 5 of each structure and 1000 total resources.</p>
+      <div class="owned" id="milestones-list"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Upgrade Lab</h2>
+      <div class="build-list">
+        <button class="upgrade-btn" data-upgrade="reelEfficiency">Efficient Reels<br><small id="cost-reelEfficiency">Cost: 80 Metal, 80 Energy</small></button>
+        <button class="upgrade-btn" data-upgrade="symbolBoost">Symbol Compression<br><small id="cost-symbolBoost">Cost: 120 Wood, 120 Stone</small></button>
+        <button class="upgrade-btn" data-upgrade="automationBoost">Automation Grid<br><small id="cost-automationBoost">Cost: 180 Stone, 120 Metal</small></button>
+        <button class="upgrade-btn" data-upgrade="bonusBoost">Lucky Core<br><small id="cost-bonusBoost">Cost: 100 Metal, 140 Energy</small></button>
+      </div>
+      <div class="owned" id="upgrades-list"></div>
+    </section>
+
+    <section class="panel">
+      <h2>World Events</h2>
+      <div class="controls">
+        <button id="biome-cycle-btn" class="secondary-btn">Biome: Meadow</button>
+      </div>
+      <p class="result" id="event-status">No event yet.</p>
+      <div class="owned" id="event-log"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Activity Feed</h2>
+      <div class="owned" id="activity-log"></div>
+    </section>
+
+    <section class="panel tips">
+      <h2>How It Works</h2>
+      <ul>
+        <li>Spinning consumes Energy and yields random symbols that grant resources.</li>
+        <li>Matching symbols gives bonus payouts.</li>
+        <li>Structures generate passive resources every second.</li>
+        <li>This is a strategy builder, not betting and no real-money mechanics.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
